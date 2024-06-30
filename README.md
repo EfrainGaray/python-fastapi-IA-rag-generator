@@ -1,1 +1,1 @@
-# proyect RAG IA multi server and models @todo Documentaion XD
+# project RAG IA multi server and models @todo Documentaion XD
