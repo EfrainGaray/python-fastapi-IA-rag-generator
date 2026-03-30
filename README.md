@@ -2,6 +2,22 @@
 
 A production-ready Retrieval-Augmented Generation (RAG) API built with FastAPI, Elasticsearch, and multiple LLM backends (Ollama, OpenAI, HuggingFace).
 
+## What's New — March 2026 (v2.0)
+
+| Feature | Before (2024) | Now (v2.0) |
+|---|---|---|
+| Tests | 0 | **75 passing** |
+| Streaming | ❌ | ✅ SSE tokens per word |
+| Document management | CLI script only | **REST API** upload / list / delete |
+| Response cache | ❌ | **LRU 300 s**, SHA-256 key, skip ES+LLM on hit |
+| Rate limiting | ❌ | **60 req/min** per IP, HTTP 429 |
+| Health check | `{"status":"ok"}` | **ES ping + model check**, HTTP 503 on degraded |
+| Observability | ❌ | **X-Request-ID + X-Latency-Ms** on all responses |
+| RAG evaluation | ❌ | **cosine similarity + source coverage** endpoint |
+| Hardcoded secrets | ✅ in source | **removed** — pydantic-settings + `.env` |
+| Async | ❌ sync requests | **fully async** httpx throughout |
+| OpenAPI docs | basic | **tags + full response schemas** |
+
 ## Architecture
 
 ![Architecture](docs/architecture.png)
