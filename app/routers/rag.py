@@ -1,8 +1,13 @@
+import json
+import time
+from typing import AsyncGenerator
+
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from loguru import logger
 
 from app.exceptions import LLMProviderError, VectorStoreError
-from app.models.schemas import QuestionRequest, RAGResponse
+from app.models.schemas import QuestionRequest, RAGResponse, StreamChunk
 from app.services.factory import get_llm_service
 from app.store.elasticsearch import search_and_rerank
 
@@ -26,13 +31,15 @@ _NO_RESULTS_PROMPT = (
 
 
 @router.post("/ask", response_model=RAGResponse)
-async def ask(request: QuestionRequest, req: Request) -> RAGResponse:
+async def ask(request: QuestionRequest, req: Request):
     embedding_model = req.app.state.embedding_model
     rerank_model = req.app.state.rerank_model
     es = req.app.state.es
 
+    t0 = time.perf_counter()
+
     try:
-        top_texts, top_sources = search_and_rerank(
+        top_texts, top_sources, top_score = search_and_rerank(
             request.question,
             embedding_model,
             rerank_model,
@@ -44,9 +51,13 @@ async def ask(request: QuestionRequest, req: Request) -> RAGResponse:
 
     if not top_texts:
         logger.info(f"No relevant texts found for: {request.question!r}")
+        latency_ms = round((time.perf_counter() - t0) * 1000, 1)
         return RAGResponse(
             answer="Lo siento, no se encontraron respuestas relevantes a tu pregunta.",
             sources=[],
+            latency_ms=latency_ms,
+            chunks_retrieved=0,
+            top_score=None,
         )
 
     sources_info = "\n".join(
@@ -59,6 +70,24 @@ async def ask(request: QuestionRequest, req: Request) -> RAGResponse:
         question=request.question,
     )
 
+    if request.stream:
+        async def event_generator() -> AsyncGenerator[str, None]:
+            try:
+                llm = get_llm_service(request.server)
+                async for token in llm.stream_generate(request.model, prompt):
+                    chunk = StreamChunk(token=token, done=False)
+                    yield f"data: {chunk.model_dump_json()}\n\n"
+                # Final done event with sources
+                sources_data = [s.model_dump() for s in top_sources]
+                final_chunk = StreamChunk(token="", done=True, sources=top_sources)
+                yield f"data: {final_chunk.model_dump_json()}\n\n"
+            except LLMProviderError as exc:
+                logger.error(f"LLM provider error during streaming: {exc}")
+                error_data = json.dumps({"error": str(exc)})
+                yield f"data: {error_data}\n\n"
+
+        return StreamingResponse(event_generator(), media_type="text/event-stream")
+
     try:
         llm = get_llm_service(request.server)
         answer = await llm.generate(request.model, prompt)
@@ -69,7 +98,14 @@ async def ask(request: QuestionRequest, req: Request) -> RAGResponse:
         logger.exception(f"Unexpected error during LLM generation: {exc}")
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
+    latency_ms = round((time.perf_counter() - t0) * 1000, 1)
     logger.info(
         f"RAG ask | question={request.question!r} | sources={len(top_sources)} | answer_len={len(answer)}"
     )
-    return RAGResponse(answer=answer, sources=top_sources)
+    return RAGResponse(
+        answer=answer,
+        sources=top_sources,
+        latency_ms=latency_ms,
+        chunks_retrieved=len(top_texts),
+        top_score=top_score,
+    )

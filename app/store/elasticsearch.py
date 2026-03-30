@@ -18,8 +18,8 @@ def search_and_rerank(
     embedding_model: Any,
     rerank_model: Any,
     es: Any,
-) -> tuple[list[str], list[Source]]:
-    """Embed question, retrieve top-K docs from ES, rerank, return top-N."""
+) -> tuple[list[str], list[Source], float | None]:
+    """Embed question, retrieve top-K docs from ES, rerank, return top-N with top score."""
     try:
         question_embedding: list[float] = (
             embedding_model.encode(question, convert_to_tensor=False).tolist()
@@ -51,7 +51,7 @@ def search_and_rerank(
     hits = search_response["hits"]["hits"]
     if not hits:
         logger.info("No documents found in Elasticsearch for the query.")
-        return [], []
+        return [], [], None
 
     texts = [hit["_source"]["content"] for hit in hits]
     raw_sources = [
@@ -70,5 +70,6 @@ def search_and_rerank(
     top_sources = [
         Source(filename=r[2][0], page=r[2][1]) for r in ranked[: settings.top_n]
     ]
+    top_score = float(ranked[0][0]) if ranked else None
 
-    return top_texts, top_sources
+    return top_texts, top_sources, top_score

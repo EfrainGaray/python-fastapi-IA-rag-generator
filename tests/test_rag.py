@@ -8,7 +8,7 @@ def test_rag_ask_returns_answer(client):
     mock_sources = [Source(filename="doc1.pdf", page=1)]
     with patch("app.routers.rag.search_and_rerank") as mock_search, \
          patch("app.routers.rag.get_llm_service") as mock_factory:
-        mock_search.return_value = (["Relevant context text."], mock_sources)
+        mock_search.return_value = (["Relevant context text."], mock_sources, 0.9)
         mock_service = AsyncMock()
         mock_service.generate = AsyncMock(return_value="Here is the answer.")
         mock_factory.return_value = mock_service
@@ -33,7 +33,7 @@ def test_rag_ask_returns_answer(client):
 
 def test_rag_ask_no_results(client):
     with patch("app.routers.rag.search_and_rerank") as mock_search:
-        mock_search.return_value = ([], [])
+        mock_search.return_value = ([], [], None)
 
         response = client.post(
             "/api/v1/rag/ask",
@@ -54,7 +54,7 @@ def test_rag_ask_llm_error(client):
     mock_sources = [Source(filename="doc1.pdf", page=1)]
     with patch("app.routers.rag.search_and_rerank") as mock_search, \
          patch("app.routers.rag.get_llm_service") as mock_factory:
-        mock_search.return_value = (["Relevant context text."], mock_sources)
+        mock_search.return_value = (["Relevant context text."], mock_sources, 0.9)
         mock_service = AsyncMock()
         mock_service.generate = AsyncMock(
             side_effect=LLMProviderError("Service unavailable")

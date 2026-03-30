@@ -1,10 +1,14 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware import Middleware
+from starlette.middleware.base import BaseHTTPMiddleware
 from loguru import logger
 
 from app.config import settings
+from app.middleware import observability_middleware
 from app.routers import direct, health, rag
+from app.routers import documents, eval as eval_router
 
 
 @asynccontextmanager
@@ -36,6 +40,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(BaseHTTPMiddleware, dispatch=observability_middleware)
+
 app.include_router(health.router)
 app.include_router(direct.router, prefix="/api/v1/direct")
 app.include_router(rag.router, prefix="/api/v1/rag")
+app.include_router(documents.router, prefix="/api/v1/documents")
+app.include_router(eval_router.router, prefix="/api/v1/rag")

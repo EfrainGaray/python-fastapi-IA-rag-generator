@@ -1,3 +1,5 @@
+from typing import AsyncGenerator
+
 import httpx
 from loguru import logger
 
@@ -41,3 +43,10 @@ class HuggingFaceService(LLMService):
         except httpx.RequestError as exc:
             logger.error(f"HuggingFace request error: {exc}")
             raise LLMProviderError("Cannot reach HuggingFace inference API") from exc
+
+    async def stream_generate(
+        self, model: str, prompt: str, max_tokens: int = 512
+    ) -> AsyncGenerator[str, None]:
+        # HF Inference API doesn't support streaming well — yield the full response as one token.
+        full_response = await self.generate(model, prompt, max_tokens)
+        yield full_response
