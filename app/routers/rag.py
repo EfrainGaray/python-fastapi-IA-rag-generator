@@ -9,6 +9,7 @@ from loguru import logger
 from app.exceptions import LLMProviderError, VectorStoreError
 from app.models.schemas import QuestionRequest, RAGResponse, StreamChunk
 from app.services.factory import get_llm_service
+from app.store.cache import RAGCache
 from app.store.elasticsearch import search_and_rerank
 
 router = APIRouter(tags=["RAG"])
@@ -35,6 +36,18 @@ async def ask(request: QuestionRequest, req: Request):
     embedding_model = req.app.state.embedding_model
     rerank_model = req.app.state.rerank_model
     es = req.app.state.es
+
+    # Cache lookup (only for non-streaming requests)
+    cache: RAGCache | None = getattr(req.app.state, "cache", None)
+    if not request.stream and cache is not None:
+        cache_key = RAGCache.make_key(request.question, request.server, request.model)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            logger.info(f"Cache hit for question={request.question!r}")
+            cached_response = cached.model_copy(
+                update={"latency_ms": 0.0, "cache_hit": True}
+            )
+            return cached_response
 
     t0 = time.perf_counter()
 
@@ -78,7 +91,6 @@ async def ask(request: QuestionRequest, req: Request):
                     chunk = StreamChunk(token=token, done=False)
                     yield f"data: {chunk.model_dump_json()}\n\n"
                 # Final done event with sources
-                sources_data = [s.model_dump() for s in top_sources]
                 final_chunk = StreamChunk(token="", done=True, sources=top_sources)
                 yield f"data: {final_chunk.model_dump_json()}\n\n"
             except LLMProviderError as exc:
@@ -102,10 +114,16 @@ async def ask(request: QuestionRequest, req: Request):
     logger.info(
         f"RAG ask | question={request.question!r} | sources={len(top_sources)} | answer_len={len(answer)}"
     )
-    return RAGResponse(
+    response = RAGResponse(
         answer=answer,
         sources=top_sources,
         latency_ms=latency_ms,
         chunks_retrieved=len(top_texts),
         top_score=top_score,
     )
+
+    # Store in cache (non-streaming only)
+    if cache is not None:
+        cache.set(cache_key, response)
+
+    return response

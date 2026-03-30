@@ -26,6 +26,7 @@ class RAGResponse(BaseModel):
     latency_ms: float = 0.0
     chunks_retrieved: int = 0
     top_score: float | None = None
+    cache_hit: bool = False
 
 
 class DirectResponse(BaseModel):
@@ -33,8 +34,15 @@ class DirectResponse(BaseModel):
     latency_ms: float = 0.0
 
 
+class HealthCheckDetail(BaseModel):
+    elasticsearch: str
+    embedding_model: str
+
+
 class HealthResponse(BaseModel):
     status: str
+    checks: HealthCheckDetail | None = None
+    version: str | None = None
 
 
 # ── Document management schemas ───────────────────────────────────────────────

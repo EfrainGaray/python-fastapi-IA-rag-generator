@@ -9,6 +9,8 @@ from fastapi import Request
 from elasticsearch import Elasticsearch
 from sentence_transformers import CrossEncoder, SentenceTransformer
 
+from app.store.cache import RAGCache
+
 
 def get_embedding_model(request: Request) -> SentenceTransformer:
     return request.app.state.embedding_model
@@ -20,3 +22,7 @@ def get_rerank_model(request: Request) -> CrossEncoder:
 
 def get_es_client(request: Request) -> Elasticsearch:
     return request.app.state.es
+
+
+def get_cache(request: Request) -> RAGCache:
+    return request.app.state.cache

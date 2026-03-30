@@ -1,4 +1,5 @@
 import pytest
+import httpx
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.ollama import OllamaService
@@ -85,3 +86,77 @@ async def test_huggingface_generate():
     assert "Authorization" in sent_headers
     assert sent_headers["Authorization"] == f"Bearer {settings.huggingface_api_token}"
     # Token must come from settings, not hardcoded (old token removed in v2)
+
+
+@pytest.mark.asyncio
+async def test_ollama_non_200_raises_llm_provider_error():
+    """OllamaService.generate must raise LLMProviderError on HTTP error status."""
+    from app.exceptions import LLMProviderError
+
+    service = OllamaService()
+
+    # Build a mock response that raises HTTPStatusError on raise_for_status()
+    mock_response = MagicMock()
+    mock_response.status_code = 503
+    mock_response.text = "Service Unavailable"
+    http_error = httpx.HTTPStatusError(
+        "503 Service Unavailable",
+        request=MagicMock(),
+        response=mock_response,
+    )
+    mock_response.raise_for_status = MagicMock(side_effect=http_error)
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with patch("app.services.ollama.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(LLMProviderError, match="Ollama returned HTTP 503"):
+            await service.generate("llama3", "Hello")
+
+
+@pytest.mark.asyncio
+async def test_openai_api_error_raises_llm_provider_error():
+    """OpenAIService.generate must raise LLMProviderError when the OpenAI client raises."""
+    from app.exceptions import LLMProviderError
+
+    service = OpenAIService()
+
+    mock_completions = AsyncMock()
+    mock_completions.create = AsyncMock(side_effect=Exception("API quota exceeded"))
+    mock_chat = MagicMock()
+    mock_chat.completions = mock_completions
+
+    service._client = MagicMock()
+    service._client.chat = mock_chat
+
+    with pytest.raises(LLMProviderError, match="OpenAI generation failed"):
+        await service.generate("gpt-4o-mini", "Hello")
+
+
+@pytest.mark.asyncio
+async def test_huggingface_non_200_raises_llm_provider_error():
+    """HuggingFaceService.generate must raise LLMProviderError on HTTP error status."""
+    from app.exceptions import LLMProviderError
+
+    service = HuggingFaceService()
+
+    mock_response = MagicMock()
+    mock_response.status_code = 429
+    mock_response.text = "Rate limit exceeded"
+    http_error = httpx.HTTPStatusError(
+        "429 Too Many Requests",
+        request=MagicMock(),
+        response=mock_response,
+    )
+    mock_response.raise_for_status = MagicMock(side_effect=http_error)
+
+    mock_client = AsyncMock()
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=False)
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    with patch("app.services.huggingface.httpx.AsyncClient", return_value=mock_client):
+        with pytest.raises(LLMProviderError, match="HuggingFace returned HTTP 429"):
+            await service.generate("mistralai/Mistral-7B-v0.1", "Hello")

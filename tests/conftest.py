@@ -36,6 +36,7 @@ def mock_rerank_model():
 def mock_es():
     """Elasticsearch client stub that returns three fake hits."""
     es = MagicMock()
+    es.ping.return_value = True
     es.search.return_value = {
         "hits": {
             "hits": [
@@ -52,25 +53,38 @@ def mock_es():
 def mock_es_empty():
     """Elasticsearch client stub that returns no hits."""
     es = MagicMock()
+    es.ping.return_value = True
     es.search.return_value = {"hits": {"hits": []}}
     return es
 
 
 @pytest.fixture()
 def client(mock_embedding_model, mock_rerank_model, mock_es):
-    """TestClient with mocked app.state — no real models or ES needed."""
-    app.state.embedding_model = mock_embedding_model
-    app.state.rerank_model = mock_rerank_model
-    app.state.es = mock_es
+    """TestClient with mocked app.state — no real models or ES needed.
+
+    State is set AFTER TestClient.__enter__ (i.e., after lifespan) so the
+    lifespan-created singletons are replaced with test doubles.
+    """
+    from app.store.cache import RAGCache
+
     with TestClient(app, raise_server_exceptions=False) as c:
+        # Override after lifespan has run
+        app.state.embedding_model = mock_embedding_model
+        app.state.rerank_model = mock_rerank_model
+        app.state.es = mock_es
+        app.state.cache = RAGCache()
         yield c
 
 
 @pytest.fixture()
 def client_empty_es(mock_embedding_model, mock_rerank_model, mock_es_empty):
     """TestClient whose ES always returns zero hits."""
-    app.state.embedding_model = mock_embedding_model
-    app.state.rerank_model = mock_rerank_model
-    app.state.es = mock_es_empty
+    from app.store.cache import RAGCache
+
     with TestClient(app, raise_server_exceptions=False) as c:
+        # Override after lifespan has run
+        app.state.embedding_model = mock_embedding_model
+        app.state.rerank_model = mock_rerank_model
+        app.state.es = mock_es_empty
+        app.state.cache = RAGCache()
         yield c

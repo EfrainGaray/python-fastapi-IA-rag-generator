@@ -113,3 +113,37 @@ def test_direct_response_includes_latency_ms_in_body(client):
     data = response.json()
     assert "latency_ms" in data
     assert data["latency_ms"] >= 0
+
+
+def test_request_id_consistent_between_request_and_response_header(client):
+    """X-Request-ID sent in the request must be exactly echoed in the response header."""
+    fixed_id = "my-fixed-request-id-abc123"
+    response = client.get("/health", headers={"X-Request-ID": fixed_id})
+
+    assert response.status_code == 200
+    # The middleware must echo the same value — no modification or regeneration
+    assert response.headers.get("x-request-id") == fixed_id
+
+
+def test_auto_generated_request_id_is_present_when_not_sent(client):
+    """If no X-Request-ID is sent, the middleware must generate and return one."""
+    # Do not send any X-Request-ID header
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    request_id = response.headers.get("x-request-id")
+    assert request_id is not None
+    assert len(request_id) > 0
+
+
+def test_request_id_is_uuid_format_when_auto_generated(client):
+    """Auto-generated request IDs must follow UUID format (36 chars with hyphens)."""
+    import re
+
+    response = client.get("/health")
+    request_id = response.headers.get("x-request-id", "")
+    uuid_pattern = re.compile(
+        r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        re.IGNORECASE,
+    )
+    assert uuid_pattern.match(request_id), f"Not a UUID: {request_id!r}"

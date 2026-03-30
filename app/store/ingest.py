@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from typing import Any
 
@@ -94,12 +95,18 @@ async def ingest_file(
     logger.info(f"Ingesting file: {filename}")
     pages = reader(file_path)
 
+    loop = asyncio.get_event_loop()
+
     actions: list[dict] = []
     for text, page_number in pages:
         chunks = _chunk_text(text, chunk_size=512, chunk_overlap=20)
         logger.debug(f"  {filename} p{page_number}: {len(chunks)} chunks")
         for chunk in chunks:
-            embedding = embedding_model.encode(chunk, convert_to_tensor=False).tolist()
+            raw_embedding = await loop.run_in_executor(
+                None,
+                lambda c=chunk: embedding_model.encode(c, convert_to_tensor=False),
+            )
+            embedding = raw_embedding.tolist() if hasattr(raw_embedding, "tolist") else list(raw_embedding)
             actions.append(
                 {
                     "_op_type": "index",
