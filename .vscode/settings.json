@@ -1,0 +1,22 @@
+{
+    "python.pythonPath": "/usr/local/bin/python", // Ruta dentro del contenedor Docker
+    "python.formatting.provider": "black",
+    "editor.formatOnSave": true,
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": true,
+    "python.linting.flake8Enabled": true,
+    "python.linting.mypyEnabled": true,
+    "python.formatting.blackArgs": [
+        "--line-length",
+        "88"
+    ],
+    "python.sortImports.path": "isort",
+    "python.sortImports.args": [
+        "--profile",
+        "black"
+    ],
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "explicit",
+        "source.fixAll": "explicit"
+    }
+}
