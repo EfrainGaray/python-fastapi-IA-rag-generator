@@ -4,22 +4,11 @@ A production-ready Retrieval-Augmented Generation (RAG) API built with FastAPI, 
 
 ## Architecture
 
-```
-graph TD
-    Client -->|POST /api/v1/rag/ask| RAGRouter
-    Client -->|POST /api/v1/direct/ask| DirectRouter
-    RAGRouter --> EmbeddingModel[SentenceTransformer]
-    RAGRouter --> Elasticsearch
-    RAGRouter --> CrossEncoder[CrossEncoder Reranker]
-    RAGRouter --> LLMFactory
-    DirectRouter --> LLMFactory
-    LLMFactory -->|ollama| OllamaService
-    LLMFactory -->|openai| OpenAIService
-    LLMFactory -->|huggingface| HuggingFaceService
-    OllamaService -->|httpx async| OllamaServer
-    OpenAIService -->|async openai| OpenAIAPI
-    HuggingFaceService -->|httpx async| HuggingFaceAPI
-```
+![Architecture](docs/architecture.png)
+
+### RAG Request Flow
+
+![RAG Flow](docs/rag_flow.png)
 
 ## Quick Start
 
